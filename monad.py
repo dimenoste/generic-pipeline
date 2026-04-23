@@ -1,3 +1,7 @@
+## Script derived from the vide https://www.youtube.com/watch?v=C2w45qRc3aU&t=365s
+## credits goes to video's author
+
+
 from dataclasses import dataclass
 
 
