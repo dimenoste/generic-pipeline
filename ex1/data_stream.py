@@ -1,12 +1,16 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
+from abc import ABC, abstractmethod
 from collections.abc import Iterable
-import ast
 
 Numeric = int | float | list[int | float] | list[int] | list[float]
 Text = str | list[str]
 Log = dict[str, str] | list[dict[str, str]]
+
+
+class ProcessStreamError(Exception):
+    pass
 
 
 class DataProcessor(ABC):
@@ -101,57 +105,74 @@ class LogProcessor(DataProcessor):
             return isinstance(data, dict)
 
 
-def main() -> None:
-    print("=== Code Nexus - Data Processor ===\n")
-    print("Testing Numeric Processor...")
-    data = 42
-    numproc = NumericProcessor()
 
-    print(f"Trying to validate input '{data}': {numproc.validate(data)}")
-    data = "Hello"
-    print(f"Trying to validate input '{data}': {numproc.validate(data)}")
-    data = "foo"
-    print(f"Test invalid ingestion of string '{data}' without prior "
-          "validation:")
-    numproc.ingest(data)
-    data = [1, 2, 3, 4, 5]
-    print("Processing data:", data)
-    numproc.ingest(data)
-    print("Extracting 3 values...")
-    for i in range(3):
-        print(f"Numeric value {i}:", numproc.output()[1])
 
-    print("\n\nTesting Text Processor...")
-    textproc = TextProcessor()
+class DataStream():
+    _processor_list: DataProcessor = []
+    validators: list[DataProcessor | None] = []
 
-    data = 42
-    print(f"Trying to validate input '{data}': {textproc.validate(data)}")
+    def register_processor(self, proc: DataProcessor) -> None:
+        if isinstance(proc, DataProcessor):
+            self._processor_list.append(proc)
+    
+    def get_validators(self, stream: list[Any]) -> None:
+        try:
+            if not isinstance(stream, list):
+                raise ProcessStreamError("Stream data should be a list")
+            for data in stream:
+                potential_validators = list(filter(lambda x: x.validate(data),
+                                                   self._processor_list))
+                if len(potential_validators) > 0:
+                    first_validator = potential_validators[0]
+                    self.validators.append(first_validator)
+                else:
+                    self.validators.append(None)
+            if len(self.validators) != len(self._processor_list):
+                raise ProcessStreamError("For each data, you should have a valid processor or None at this point")
+            if None in self.validators:
+                raise ProcessStreamError("DataStream error -"
+                                         "Can't process element in stream:"
+                                         f"{data}")
 
-    data = ["Hello", "Nexus", "World"]
-    print("Processing data:", data)
-    textproc.ingest(data)
-    print("Extracting 1 value...")
-    for i in range(1):
-        print(f"Text value {i}:", textproc.output()[1])
+        except ProcessStreamError as e:
+            self.validators = []
+            print(e)
 
-    print("\n\nTesting Log Processor...")
-    logproc = LogProcessor()
 
-    data = "Hello"
-    print(f"Trying to validate input '{data}': {logproc.validate(data)}")
+    def process_stream(self, stream: list[Any]) -> None:
+        try:
+            self.get_validators(stream)
+            for proc, data in zip(self.validators, stream):
+                proc.data()
 
-    data = [{'log_level': 'NOTICE', 'log_message':
-            'Connection to server'}, {'log_level': 'ERROR', 'log_message':
-            'Unauthorized access!!'}]
-    print("Processing data:", data)
-    logproc.ingest(data)
-    print("Extracting 2 values...")
-    for i in range(2):
-        log = logproc.output()[1]
-        level = ast.literal_eval(log)['log_level']
-        msg = ast.literal_eval(log)['log_message']
-        print(f"Log entry {i}: {level}: {msg}")
+        except ProcessStreamError as e:
+            print(e)
 
+    def print_processors_stats(self) -> None:
+        for proc in self._processor_list:
+            elem_for_proc = list(filter(lambda x: isinstance(x,
+                                                    proc),
+                                                    self.validators))
+            
+            remaining_elem = len(data) - len(numeric_elements) 
+            
 
 if __name__ == "__main__":
-    main()
+    data = [
+            'Hello world',
+            [3.14, -1, 2.71],
+            [
+                {'log_level': 'WARNING', 'log_message': 'Telnet access! Use ssh instead'},
+                {'log_level': 'INFO', 'log_message': 'User wil is connected'}
+            ],
+            42,
+            ['Hi', 'five']
+        ]
+
+    dataproc = DataStream()
+    myprocs = [NumericProcessor(), TextProcessor(), LogProcessor()]
+    [dataproc.register_processor(proc) for proc in myprocs]
+    print(dataproc._processor_list)
+    dataproc.process_stream(data)
+    print(dataproc.validators)
+
