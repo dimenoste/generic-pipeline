@@ -57,5 +57,3 @@ def add_one(x: T) -> T:
 
 res = to_option(12).flatmap(square).flatmap(add_one)
 print(res)
-
-

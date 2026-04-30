@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Protocol
 
 Numeric = int | float | list[int | float]
 Text = str | list[str]
@@ -11,7 +11,7 @@ class ProcessStreamError(Exception):
     pass
 
 
-class DataProcessor(ABC):
+class datasreamessor(ABC):
     def __init__(self) -> None:
         self.ingested: list[tuple[int, str]] = []
         self.count: int = 0
@@ -25,11 +25,11 @@ class DataProcessor(ABC):
     def ingest(self, data: Any) -> None:
         pass
 
-    # def output(self) -> tuple[int, str]:
-    #     return self.ingested.pop(0)
+    def output(self) -> tuple[int, str]:
+        return self.ingested.pop(0)
 
 
-class NumericProcessor(DataProcessor):
+class NumericProcessor(datasreamessor):
 
     def __init__(self) -> None:
         super().__init__()
@@ -58,7 +58,7 @@ class NumericProcessor(DataProcessor):
             return isinstance(data, int) or isinstance(data, float)
 
 
-class TextProcessor(DataProcessor):
+class TextProcessor(datasreamessor):
     def __init__(self) -> None:
         super().__init__()
 
@@ -86,7 +86,7 @@ class TextProcessor(DataProcessor):
             return isinstance(data, str)
 
 
-class LogProcessor(DataProcessor):
+class LogProcessor(datasreamessor):
     def __init__(self) -> None:
         super().__init__()
 
@@ -111,15 +111,19 @@ class LogProcessor(DataProcessor):
             return isinstance(data, dict)
 
 
-class DataStream():
+class ExportPlugin(Protocol):
+    def process_output(self, data: list[tuple[int, str]]) -> None:
+        ...
 
+
+class DataStream():
     def __init__(self):
-        self._processor_list: list[DataProcessor] = []
+        self._processor_list: list[datasreamessor] = []
         self._unhandled_data: list[Any] = []
         self.len_stream: int = 0
 
-    def register_processor(self, proc: DataProcessor) -> None:
-        if isinstance(proc, DataProcessor):
+    def register_processor(self, proc: datasreamessor) -> None:
+        if isinstance(proc, datasreamessor):
             self._processor_list.append(proc)
 
     def process_stream(self, stream: list[Any]) -> None:
@@ -141,6 +145,37 @@ class DataStream():
                   "items processed, "
                   f"remaining {self.len_stream - proc.nb_item} on processor")
 
+    def output_pipeline(self, nb: int, plugin: ExportPlugin) -> None:
+        for proc in self._processor_list:
+            output_logs = []
+            data = proc.ingested[:nb] if nb <= len(proc.ingested) else proc.ingested
+            if isinstance(proc, LogProcessor):
+                for item in range(len(data)):
+                    log = data[item][1]
+                    elem = log[1:-1].replace('\'', '').split(",")[0].split(":")
+                    level = str(elem[1]).strip()
+                    elem = log[1:-1].replace('\'', '').split(",")[1].split(":")
+                    message = str(elem[1]).strip()
+                    output_logs.append([item, f"{level}: {message}"])
+                plugin.process_output(output_logs)
+            else:
+                plugin.process_output(data)
+
+
+class CSV:
+    def process_output(self, data: list[tuple[int, str]]) -> None:
+        print("CSV Output:")
+        data = ",".join([x[1] for x in data])
+        print(data)
+
+class JSON:
+    def process_output(self, data: list[tuple[int, str]]) -> None:
+        print("JSON Output:")
+        mydict = dict()
+        for item, x in enumerate(data):
+            mydict[f"item_{item}"] = x[1]
+        print(mydict)
+
 
 if __name__ == "__main__":
     data = [
@@ -157,11 +192,18 @@ if __name__ == "__main__":
             ['Hi', 'five']
         ]
     print(data)
-    dataproc = DataStream()
+    datasream = DataStream()
     myprocs = [NumericProcessor(), TextProcessor(), LogProcessor()]
     for proc in myprocs:
-        dataproc.register_processor(proc)  # type: ignore[func-returns-value]
-    dataproc.process_stream(data)
+        datasream.register_processor(proc)  # type: ignore[func-returns-value]
+    datasream.process_stream(data)
 
-    dataproc.print_processors_stats()
-    print(f"Unhandled data : {dataproc._unhandled_data}")
+    datasream.print_processors_stats()
+    print(f"Unhandled data : {datasream._unhandled_data}")
+
+    nb_to_send = 3
+    print(f"Send {nb_to_send} processed data from each processor to a CSV plugin:")
+    csv_plugin = CSV()
+    datasream.output_pipeline(2, csv_plugin)
+    json_plugin = JSON()
+    datasream.output_pipeline(2, json_plugin)

@@ -1,18 +1,20 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
-from collections.abc import Iterable
-import ast
 
-Numeric = int | float | list[int | float] | list[int] | list[float]
+Numeric = int | float | list[int | float]
 Text = str | list[str]
 Log = dict[str, str] | list[dict[str, str]]
 
 
+class ProcessStreamError(Exception):
+    pass
+
+
 class DataProcessor(ABC):
     def __init__(self) -> None:
-        self.ingested: list[str] = []
-        self.count: int = 1
+        self.ingested: list[tuple[int, str]] = []
+        self.count: int = 0
 
     @abstractmethod
     def validate(self, data: Any) -> bool:
@@ -23,9 +25,7 @@ class DataProcessor(ABC):
         pass
 
     def output(self) -> tuple[int, str]:
-        rank = self.count
-        self.count += 1
-        return (rank, self.ingested.pop(0))
+        return self.ingested.pop(0)
 
 
 class NumericProcessor(DataProcessor):
@@ -37,13 +37,14 @@ class NumericProcessor(DataProcessor):
         try:
             if not self.validate(data):
                 raise TypeError("Got exception: Improper numeric data")
-            if isinstance(data, Iterable):
+            if isinstance(data, list):
                 for x in data:
-                    self.ingested.append(str(x))
+                    self.ingested.append((self.count, str(x)))
+                    self.count += 1
             else:
-                self.ingested.append(str(data))
+                self.ingested.append((self.count, str(data)))
+                self.count += 1
         except TypeError as e:
-            self.ingested = []
             print(f"{e}")
 
     def validate(self, data: Any) -> bool:
@@ -63,10 +64,14 @@ class TextProcessor(DataProcessor):
         try:
             if not self.validate(data):
                 raise TypeError("Got exception: Improper numeric data")
-            for x in data:
-                self.ingested.append(str(x))
+            if isinstance(data, str):
+                self.ingested.append((self.count, str(data)))
+                self.count += 1
+            else:
+                for x in data:
+                    self.ingested.append((self.count, str(x)))
+                    self.count += 1
         except TypeError as e:
-            self.ingested = []
             print(f"{e}")
 
     def validate(self, data: Any) -> bool:
@@ -82,15 +87,16 @@ class LogProcessor(DataProcessor):
     def __init__(self) -> None:
         super().__init__()
 
-    def ingest(self, data: Text) -> None:
-        try:
-            if not self.validate(data):
-                raise TypeError("Got exception: Improper numeric data")
+    def ingest(self, data: Log) -> None:
+        if not self.validate(data):
+            raise TypeError("Got exception: Improper numeric data")
+        if isinstance(data, list):
             for x in data:
-                self.ingested.append(str(x))
-        except TypeError as e:
-            self.ingested = []
-            print(f"Got exception: {e}")
+                self.ingested.append((self.count, str(x)))
+                self.count += 1
+        else:
+            self.ingested.append((self.count, str(data)))
+            self.count += 1
 
     def validate(self, data: Any) -> bool:
         if isinstance(data, list):
@@ -118,8 +124,9 @@ def main() -> None:
     print("Processing data:", data)
     numproc.ingest(data)
     print("Extracting 3 values...")
-    for i in range(3):
-        print(f"Numeric value {i}:", numproc.output()[1])
+    for _ in range(3):
+        output = numproc.output()
+        print(f"Numeric value {output[0]}: {output[1]}")
 
     print("\n\nTesting Text Processor...")
     textproc = TextProcessor()
@@ -131,8 +138,8 @@ def main() -> None:
     print("Processing data:", data)
     textproc.ingest(data)
     print("Extracting 1 value...")
-    for i in range(1):
-        print(f"Text value {i}:", textproc.output()[1])
+    output = textproc.output()
+    print(f"Text value {output[0]}: {output[1]}")
 
     print("\n\nTesting Log Processor...")
     logproc = LogProcessor()
@@ -146,12 +153,9 @@ def main() -> None:
     print("Processing data:", data)
     logproc.ingest(data)
     print("Extracting 2 values...")
-    for i in range(2):
-        log = logproc.output()[1]
-        level = ast.literal_eval(log)['log_level']
-        msg = ast.literal_eval(log)['log_message']
-        print(f"Log entry {i}: {level}: {msg}")
-
+    for _ in range(2):
+        output = logproc.output()
+        print(f"Log entry {output[0]}: {output[1]}")
 
 if __name__ == "__main__":
     main()
