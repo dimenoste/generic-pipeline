@@ -117,7 +117,7 @@ class ExportPlugin(Protocol):
 
 
 class DataStream():
-    def __init__(self):
+    def __init__(self) -> None:
         self._processor_list: list[datasreamessor] = []
         self._unhandled_data: list[Any] = []
         self.len_stream: int = 0
@@ -148,7 +148,8 @@ class DataStream():
     def output_pipeline(self, nb: int, plugin: ExportPlugin) -> None:
         for proc in self._processor_list:
             output_logs = []
-            data = proc.ingested[:nb] if nb <= len(proc.ingested) else proc.ingested
+            data = proc.ingested[:nb] if nb <= len(proc.ingested)\
+                else proc.ingested
             if isinstance(proc, LogProcessor):
                 for item in range(len(data)):
                     log = data[item][1]
@@ -156,7 +157,7 @@ class DataStream():
                     level = str(elem[1]).strip()
                     elem = log[1:-1].replace('\'', '').split(",")[1].split(":")
                     message = str(elem[1]).strip()
-                    output_logs.append([item, f"{level}: {message}"])
+                    output_logs.append((int(item), f"{level}: {message}"))
                 plugin.process_output(output_logs)
             else:
                 plugin.process_output(data)
@@ -167,6 +168,7 @@ class CSV:
         print("CSV Output:")
         data = ",".join([x[1] for x in data])
         print(data)
+
 
 class JSON:
     def process_output(self, data: list[tuple[int, str]]) -> None:
@@ -191,19 +193,28 @@ if __name__ == "__main__":
             42,
             ['Hi', 'five']
         ]
-    print(data)
+    print("=== Code Nexus - Data Pipeline ===\n")
+    print("Initialize Data Stream...\n")
+    print("== DataStream statistics ==")
+
+    print(f"Send first batch of data on stream: {data}\n")
     datasream = DataStream()
     myprocs = [NumericProcessor(), TextProcessor(), LogProcessor()]
     for proc in myprocs:
         datasream.register_processor(proc)  # type: ignore[func-returns-value]
     datasream.process_stream(data)
 
+    print("== DataStream statistics ==")
     datasream.print_processors_stats()
     print(f"Unhandled data : {datasream._unhandled_data}")
 
     nb_to_send = 3
-    print(f"Send {nb_to_send} processed data from each processor to a CSV plugin:")
+    print(f"Send {nb_to_send} processed data"
+          f"from each processor to a CSV plugin:")
     csv_plugin = CSV()
     datasream.output_pipeline(2, csv_plugin)
+
+    print(f"Send {nb_to_send} processed data"
+          "from each processor to a JSON plugin:")
     json_plugin = JSON()
     datasream.output_pipeline(2, json_plugin)
